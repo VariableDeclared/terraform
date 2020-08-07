@@ -1,0 +1,114 @@
+provider "azurerm" {
+    # whilst version is optional we /strongly recommend/ using it to pin the version of the privder.
+    version = "=2.21.0"
+    subscription_id = "SUBSCRIPTION-ID"
+    # Argument reference: https://www.terraform.io/docs/providers/azurerm/index.html#argument-reference
+    features {}
+    skip_provider_registration = true
+}
+
+variable "vm_prefix" {
+   type    = string
+   default = "NAME-vms-"
+}
+
+variable "vm_count" {
+   type    = string
+   default = 5
+}
+
+
+resource "azurerm_resource_group" "resource-name" {
+      lifecycle {
+               prevent_destroy = true
+      }
+     name = "NAME"
+     location = "West Europe"
+
+     tags = {
+         App-ID = "APP TAG"
+     } 
+}
+
+
+resource "azurerm_virtual_network" "resource-name" {
+      lifecycle {
+               prevent_destroy = true
+      }
+      address_space       = [
+          "10.0.0.0/24",
+        ]
+      dns_servers         = []
+      location            = "westeurope"
+      name                = "VIRTUAL-NETWORK-NAME"
+      resource_group_name = azurerm_resource_group.resource-name.name
+
+      tags = {
+         App-ID = "APP-TAG"
+      } 
+
+      timeouts {}
+
+}
+
+resource "azurerm_network_interface" "resource-name" {
+     name                = "vmnic-${count.index}"
+     count               = "${var.vm_count}"
+     resource_group_name = azurerm_resource_group.resource-name.name
+     location            = azurerm_resource_group.resource-name.location
+     ip_configuration {
+        name                          = "resource-name"
+        subnet_id                     = "/subscriptions/SUBSCRIPTION-GUID/resourceGroups/RG-NAME/providers/Microsoft.Network/virtualNetworks/NETWORK-NAME/subnets/default"
+        private_ip_address_allocation = "Dynamic"
+        public_ip_address_id          = azurerm_public_ip.resource-name[count.index].id
+
+      }
+}
+
+
+resource "azurerm_public_ip" "resource-name" {
+    name                = "vm-pub-ip${count.index}"
+    count               = "${var.vm_count}"
+    resource_group_name = azurerm_resource_group.resource-name.name
+    location            = azurerm_resource_group.resource-name.location
+    allocation_method   = "Dynamic"
+}
+
+# TODO: Figure out how to apply data to n+1 items that have not been created yet.
+#data "azurerm_public_ip" "resource-name" {
+  #count               = "${var.vm_count}"
+  #name                = azurerm_public_ip.resource-name[count.index].name
+  #resource_group_name = azurerm_linux_virtual_machine.resource-name[count.index].resource_group_name
+#}
+
+#output "public_ip_address" {
+   #value = ["${data.azurerm_public_ip.resource-name.*}"]
+#}
+
+resource "azurerm_linux_virtual_machine" "resource-name" {
+    name  = "${var.vm_prefix}${count.index}"
+    count = "${var.vm_count}"
+    resource_group_name = azurerm_resource_group.resource-name.name
+    location = azurerm_resource_group.resource-name.location
+    size     = "Standard_F2"
+    network_interface_ids = [
+         azurerm_network_interface.resource-name[count.index].id
+    ]
+    admin_username = "ubuntu"
+    admin_ssh_key {
+        username = "ubuntu"
+        public_key = file("~/.ssh/id_rsa.pub")
+    }
+    os_disk {
+      caching              = "ReadWrite"
+      storage_account_type = "Standard_LRS"
+    }
+
+    source_image_reference {
+      publisher = "Canonical"
+      offer     = "UbuntuServer"
+      sku       = "18.04-LTS"
+      version   = "latest"
+    }
+
+}
