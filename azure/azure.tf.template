@@ -1,10 +1,21 @@
-provider "azurerm" {
-    # whilst version is optional we /strongly recommend/ using it to pin the version of the privder.
-    version = "=2.21.0"
-    subscription_id = "SUBSCRIPTION-ID"
-    # Argument reference: https://www.terraform.io/docs/providers/azurerm/index.html#argument-reference
-    features {}
-    skip_provider_registration = true
+variable "subscription-id" {
+   type    = string
+   default = "YOUR-SUBSCRIPTION-ID"
+}
+
+variable "rg-name" {
+   type    = string
+   default = "YOUR-RESOURCE-GROUP-NAME"
+}
+
+variable "virtual-network-name" {
+   type    = string
+   default = "YOUR-VIRTUAL-NETWORK-NAME"
+}
+
+variable "subnet-name" {
+   type    = string
+   default = "YOUR-SUBNET-NAME"
 }
 
 variable "vm_prefix" {
@@ -17,19 +28,31 @@ variable "vm_count" {
    default = 5
 }
 
+variable "app-tag" {
+   type    = string
+   default = "YOUR-APP-TAG"
+}
+
+provider "azurerm" {
+    # whilst version is optional we /strongly recommend/ using it to pin the version of the privder.
+    version = "=2.21.0"
+    subscription_id = "${var.subscription-id}"
+    # Argument reference: https://www.terraform.io/docs/providers/azurerm/index.html#argument-reference
+    features {}
+    skip_provider_registration = true
+}
 
 resource "azurerm_resource_group" "resource-name" {
       lifecycle {
                prevent_destroy = true
       }
-     name = "NAME"
+     name = "${var.rg-name}"
      location = "West Europe"
 
      tags = {
-         App-ID = "APP TAG"
+         App-ID = "${var.app-tag}"
      } 
 }
-
 
 resource "azurerm_virtual_network" "resource-name" {
       lifecycle {
@@ -40,15 +63,22 @@ resource "azurerm_virtual_network" "resource-name" {
         ]
       dns_servers         = []
       location            = "westeurope"
-      name                = "VIRTUAL-NETWORK-NAME"
+      name                = "${var.virtual-network-name}"
       resource_group_name = azurerm_resource_group.resource-name.name
 
       tags = {
-         App-ID = "APP-TAG"
+         App-ID = "${var.app-tag}"
       } 
 
       timeouts {}
 
+}
+
+resource "azurerm_subnet" "resource-name"{
+     name                 = "${var.subnet-name}"
+     resource_group_name  = azurerm_resource_group.resource-name.name
+     virtual_network_name = azurerm_virtual_network.resource-name.name
+     address_prefixes     = ["10.0.0.0/24"]
 }
 
 resource "azurerm_network_interface" "resource-name" {
@@ -58,13 +88,12 @@ resource "azurerm_network_interface" "resource-name" {
      location            = azurerm_resource_group.resource-name.location
      ip_configuration {
         name                          = "resource-name"
-        subnet_id                     = "/subscriptions/SUBSCRIPTION-GUID/resourceGroups/RG-NAME/providers/Microsoft.Network/virtualNetworks/NETWORK-NAME/subnets/default"
+        subnet_id                     = "/subscriptions/${var.subscription-id}resourceGroups/${var.rg-name}/providers/Microsoft.Network/virtualNetworks/${var.virtual-network-name}/subnets/${var.subnet-name}"
         private_ip_address_allocation = "Dynamic"
         public_ip_address_id          = azurerm_public_ip.resource-name[count.index].id
 
       }
 }
-
 
 resource "azurerm_public_ip" "resource-name" {
     name                = "vm-pub-ip${count.index}"
